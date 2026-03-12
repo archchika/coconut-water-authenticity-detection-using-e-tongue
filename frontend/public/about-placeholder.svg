@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" fill="none">
+  <rect width="600" height="400" fill="#ecfdf5"/>
+  <circle cx="300" cy="200" r="100" fill="#a7f3d0" opacity="0.8"/>
+  <circle cx="300" cy="200" r="60" fill="#6ee7b7"/>
+  <text x="300" y="205" text-anchor="middle" font-size="14" fill="#065f46">Coconut</text>
+  <text x="300" y="225" text-anchor="middle" font-size="12" fill="#047857">Sri Lanka</text>
+</svg>

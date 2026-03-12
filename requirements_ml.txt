@@ -1,0 +1,3 @@
+# For ml_coconut_water.py (coconut_water_ml_dataset.md)
+pandas>=1.3
+scikit-learn>=1.0

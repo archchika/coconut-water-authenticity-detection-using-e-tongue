@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" fill="none">
+  <defs>
+    <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#166534"/>
+      <stop offset="100%" style="stop-color:#15803d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="url(#heroGrad)"/>
+  <circle cx="600" cy="200" r="80" fill="rgba(255,255,255,0.15)"/>
+  <text x="600" y="195" text-anchor="middle" font-family="Georgia, serif" font-size="28" fill="white">Organic Coconut</text>
+  <text x="600" y="225" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" fill="rgba(255,255,255,0.9)">Authenticity &amp; Quality</text>
+</svg>

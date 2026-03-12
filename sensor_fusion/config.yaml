@@ -1,0 +1,50 @@
+# E-Tongue Sensor Fusion — Configuration (Phase 2.1)
+# Input source from ESP32; pipeline params for filtering and feature vector.
+
+input:
+  # One of: serial, tcp, http
+  source: serial
+  serial:
+    port: COM3          # Windows: COM3; Linux/RPi: /dev/ttyUSB0
+    baud: 115200
+    timeout_sec: 1.0
+  tcp:
+    host: "0.0.0.0"     # Listen on all interfaces for incoming ESP32/bridge
+    port: 9000
+  http:
+    host: "0.0.0.0"
+    port: 8000
+    path: "/api/reading" # ESP32 POSTs here; pipeline reads from queue
+
+# Pipeline: used in Phase 2.2–2.5
+pipeline:
+  moving_average_window: 5   # Rolling window size per channel (e.g. 5–10)
+  # Optional per-channel window (same window for all if omitted)
+  # moving_average_windows:
+  #   ph: 5
+  #   tds: 5
+  #   temperature: 5
+  #   turbidity: 5
+  baseline:                  # Subtract from smoothed values (e.g. distilled water)
+    ph: 7.0
+    tds: 0.0
+    temperature: 25.0
+    turbidity: 0.0
+  # Optional derived features to append to [pH, tds, temperature, turbidity]
+  # derived_features: []    # base 4 only
+  # derived_features: [ph_tds, turb_per_temp]   # append ph*(tds/1000), turb/(temp+eps)
+  filter:
+    type: median            # median | lowpass (default for all channels)
+    window: 3               # For median: kernel size; for lowpass: not used
+    alpha: 0.3              # For lowpass: smoothing factor (0–1), ignored if type=median
+    # Optional per-channel override (same keys: type, window, alpha)
+    channels:
+      # ph: { type: median, window: 3 }
+      # tds: { type: lowpass, alpha: 0.3 }
+      # temperature: { type: lowpass, alpha: 0.2 }
+      # turbidity: { type: median, window: 5 }
+
+# Logging
+log:
+  raw: true                 # Log raw samples from input
+  fused: true               # Log fused feature vector for debug

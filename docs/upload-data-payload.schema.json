@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "E-Tongue upload payload (POST /api/upload-data/)",
+  "description": "Phase 5.1 — Request body for IoT upload endpoint",
+  "type": "object",
+  "required": ["timestamp", "pH", "tds", "temperature", "turbidity", "status"],
+  "properties": {
+    "timestamp": {
+      "description": "ISO8601 UTC string or Unix milliseconds",
+      "oneOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "number", "minimum": 0 }
+      ]
+    },
+    "pH": { "type": "number", "minimum": 0, "maximum": 14 },
+    "tds": { "type": "number", "minimum": 0 },
+    "temperature": { "type": "number" },
+    "turbidity": { "type": "number", "minimum": 0 },
+    "status": {
+      "type": "string",
+      "enum": ["unknown", "threshold_alert", "authentic", "adulterated"]
+    },
+    "predicted_sugar": { "type": ["number", "null"] },
+    "predicted_citric": { "type": ["number", "null"] },
+    "predicted_ascorbic": { "type": ["number", "null"] },
+    "authenticity": { "type": "string", "enum": ["Authentic", "Adulterated"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "source_device_id": { "type": "string" },
+    "system_state": {
+      "type": "string",
+      "enum": ["IDLE", "DETECTING", "READ_COMPLETE", "CLEANING", "RINSING", "DRYING", "STABILIZE", "READY", "CALIBRATION"]
+    }
+  },
+  "additionalProperties": true
+}

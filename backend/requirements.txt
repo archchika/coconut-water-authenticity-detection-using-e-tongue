@@ -1,0 +1,8 @@
+# Backend — Django (Phase 5.3+) and upload client (Phase 5.2)
+requests>=2.28
+Django>=4.2
+djangorestframework>=3.14
+django-cors-headers>=4.3
+psycopg2-binary>=2.9
+python-dotenv>=1.0
+gunicorn>=21.0

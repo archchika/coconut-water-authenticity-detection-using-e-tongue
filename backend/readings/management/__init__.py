@@ -1,0 +1,1 @@
+# Readings app management package

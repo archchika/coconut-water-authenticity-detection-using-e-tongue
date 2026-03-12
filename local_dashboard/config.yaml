@@ -1,0 +1,21 @@
+# Local dashboard — Data source and refresh (Phase 4.1)
+# Poll ESP32 gateway or local ML server for latest reading.
+
+data_source:
+  # URL of local server that returns latest reading (JSON).
+  # Example: Raspberry Pi runs a small HTTP server that stores last POST from ESP32 and serves it here.
+  url: "http://127.0.0.1:5000/api/current"
+  # How often to poll (seconds). 2–5 s typical.
+  refresh_interval_sec: 3
+  # Request timeout (seconds).
+  timeout_sec: 5
+
+# Live graphs (Phase 4.2): keep last N points or last N seconds of data
+graphs:
+  max_points: 100       # Max points to show (e.g. ~5 min at 3 s refresh)
+  max_seconds: 300     # Alternatively cap by time (5 min); use min of both
+
+# Expected response shape (for reference): same as ESP32 / fusion output
+# { "timestamp_ms", "pH", "tds", "temperature", "turbidity", "status" }
+# Optional: "predicted_sugar", "predicted_citric", "predicted_ascorbic", "authenticity"
+# Optional (Phase 4.6): "system_state" or "state" — IDLE, DETECTING, CLEANING, RINSING, DRYING, STABILIZE, READY, CALIBRATION
