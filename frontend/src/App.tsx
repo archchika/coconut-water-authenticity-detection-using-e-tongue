@@ -22,6 +22,9 @@ function App() {
         </Route>
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
+          <Route path="readings" element={<AdminDashboard />} />
+          <Route path="predictions" element={<AdminDashboard />} />
+          <Route path="logs" element={<AdminDashboard />} />
         </Route>
       </Routes>
     </AuthProvider>

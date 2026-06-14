@@ -13,14 +13,23 @@ from logs.models import SystemLog
 
 
 # Sample rows: (ph, tds, temp, turbidity, sugar, citric, ascorbic, status)
+# pH: 4.5-6.5 typical for coconut water; citric 0.04-0.15%; ascorbic 0.05-0.12%; sugar 2-7%
 SAMPLE_ROWS = [
-    (5.2, 420.0, 26.5, 1.1, 4.8, 0.12, 0.08, "authentic"),
-    (5.4, 380.0, 25.8, 0.9, 4.5, 0.11, 0.07, "authentic"),
-    (5.1, 450.0, 27.0, 1.2, 5.0, 0.13, 0.09, "authentic"),
-    (5.6, 390.0, 26.2, 1.0, 4.2, 0.10, 0.06, "authentic"),
-    (4.9, 510.0, 25.0, 1.5, 6.2, 0.18, 0.12, "adulterated"),  # one adulterated -> alert + log
-    (5.3, 410.0, 26.0, 1.0, 4.6, 0.11, 0.08, "authentic"),
-    (5.2, 430.0, 26.8, 1.1, 4.7, 0.12, 0.07, "authentic"),
+    (5.10, 420.0, 26.5, 1.1, 5.00, 0.13, 0.09, "authentic"),
+    (5.40, 380.0, 25.8, 0.9, 4.50, 0.11, 0.07, "authentic"),
+    (5.20, 450.0, 27.0, 1.2, 4.80, 0.12, 0.08, "authentic"),
+    (5.35, 410.0, 26.0, 1.0, 4.65, 0.10, 0.06, "authentic"),
+    (5.23, 430.0, 26.8, 1.1, 4.77, 0.12, 0.08, "authentic"),
+    (4.85, 520.0, 25.0, 1.6, 6.50, 0.19, 0.14, "adulterated"),
+    (5.55, 395.0, 26.2, 1.0, 4.20, 0.09, 0.05, "authentic"),
+    (5.30, 440.0, 26.5, 1.2, 4.90, 0.12, 0.08, "authentic"),
+    (5.18, 435.0, 26.1, 1.0, 4.85, 0.11, 0.07, "authentic"),
+    (5.42, 398.0, 25.8, 0.95, 4.55, 0.10, 0.06, "authentic"),
+    (5.08, 455.0, 27.2, 1.15, 4.92, 0.12, 0.08, "authentic"),
+    (5.28, 418.0, 26.4, 1.05, 4.72, 0.11, 0.07, "authentic"),
+    (5.15, 442.0, 26.0, 1.1, 4.88, 0.12, 0.08, "authentic"),
+    (5.38, 405.0, 25.9, 0.98, 4.62, 0.10, 0.06, "authentic"),
+    (5.22, 428.0, 26.6, 1.08, 4.78, 0.11, 0.07, "authentic"),
 ]
 
 
@@ -48,15 +57,9 @@ class Command(BaseCommand):
             now = now.replace(tzinfo=timezone.utc)
 
         created = 0
-        # Spread samples: some today, some in past week, some in past month
+        # All 15 readings on today, spaced by 30 min so they're visible when selecting today
         for i, (ph, tds, temp, turb, sugar, citric, ascorbic, status) in enumerate(SAMPLE_ROWS):
-            # Offset so we have data for daily (today), weekly, monthly
-            if i < 2:
-                ts = now - timedelta(hours=i)
-            elif i < 5:
-                ts = now - timedelta(days=i + 1)
-            else:
-                ts = now - timedelta(days=10 + i)
+            ts = now - timedelta(minutes=i * 30)
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
 

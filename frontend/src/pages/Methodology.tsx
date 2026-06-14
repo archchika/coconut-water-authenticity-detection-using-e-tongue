@@ -12,7 +12,7 @@ export default function Methodology() {
         Our coconut water authenticity and ingredient estimates are produced using an <strong>E-Tongue</strong> (electronic tongue)
         system: multi-sensor readings (pH, TDS, temperature, turbidity) are fused and fed into a calibrated model that predicts
         sugar, citric acid, and ascorbic acid levels. Predictions are compared to natural ranges to classify each batch as
-        <strong> Authentic</strong> or <strong> Adulterated</strong>.
+        <strong> authentic</strong> or <strong> adulterated</strong>.
       </p>
       <p>
         Sensors are calibrated against controlled samples. The full methodology, calibration protocol, mathematical formulation,

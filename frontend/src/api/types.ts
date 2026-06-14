@@ -56,6 +56,20 @@ export interface PredictionItem {
   confidence: number | null;
 }
 
+/** GET /api/daily/readings/ — row for Quality page table */
+export interface DailyReadingRow {
+  id: number;
+  reading: number;
+  date: string;
+  time: string;
+  ph: number;
+  predicted_sugar: number;
+  predicted_citric: number;
+  predicted_ascorbic: number;
+  authenticity_status: string;
+  confidence: number | null;
+}
+
 /** Phase 6.6 — GET /api/alerts/ list item */
 export interface AlertItem {
   id: number;

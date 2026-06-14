@@ -19,7 +19,12 @@ class UploadRateThrottle(UserRateThrottle):
     scope = "upload"
 
 from .models import SensorReading, Prediction
-from .serializers import UploadPayloadSerializer, SensorReadingListSerializer, PredictionListSerializer
+from .serializers import (
+    UploadPayloadSerializer,
+    SensorReadingListSerializer,
+    PredictionListSerializer,
+    DailyReadingsSerializer,
+)
 from .aggregation import aggregate_daily, aggregate_weekly, aggregate_monthly
 from alerts.models import Alert
 from logs.models import SystemLog
@@ -227,6 +232,60 @@ def _parse_date_range(request):
         except ValueError:
             pass
     return start, end
+
+
+class DailyReadingsListView(APIView):
+    """GET /api/daily/readings/?date=YYYY-MM-DD — list of predictions with readings for a day. Public."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        date_str = request.query_params.get("date")
+        if not date_str:
+            return Response(
+                {"error": "Missing query param: date (YYYY-MM-DD)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"error": "Invalid date; use YYYY-MM-DD"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        start = timezone.make_aware(
+            datetime.combine(date, datetime.min.time()),
+            timezone=dt_timezone.utc,
+        )
+        end = timezone.make_aware(
+            datetime.combine(date, datetime.max.time()),
+            timezone=dt_timezone.utc,
+        )
+        predictions = (
+            Prediction.objects.filter(timestamp__gte=start, timestamp__lte=end)
+            .select_related("reading")
+            .order_by("-timestamp")
+        )
+        rows = []
+        for p in predictions:
+            reading = p.reading
+            dt = p.timestamp
+            if timezone.is_aware(dt):
+                dt = timezone.localtime(dt)
+            rows.append({
+                "id": p.id,
+                "reading": p.reading_id,
+                "date": dt.strftime("%Y-%m-%d"),
+                "time": dt.strftime("%H:%M"),
+                "ph": reading.ph if reading else 0,
+                "predicted_sugar": p.predicted_sugar,
+                "predicted_citric": p.predicted_citric,
+                "predicted_ascorbic": p.predicted_ascorbic,
+                "authenticity_status": p.authenticity_status,
+                "confidence": p.confidence,
+            })
+        serializer = DailyReadingsSerializer(rows, many=True)
+        return Response(serializer.data)
 
 
 class SensorReadingListView(APIView):

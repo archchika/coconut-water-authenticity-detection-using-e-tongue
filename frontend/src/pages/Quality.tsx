@@ -14,28 +14,179 @@ import {
 } from "recharts";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { fetchDaily, fetchWeekly, fetchMonthly, getApiErrorMessage } from "../api/client";
-import type { AggregationResponse } from "../api/types";
+import { fetchDaily, fetchDailyReadings, fetchWeekly, fetchMonthly, getApiErrorMessage } from "../api/client";
+import type { AggregationResponse, DailyReadingRow } from "../api/types";
 import { format, getISOWeek, parseISO } from "date-fns";
+import { naturalReference } from "../data/naturalReference";
 
-function AuthenticityBadge({ status }: { status: "authentic" | "adulterated" }) {
-  const isAuthentic = status === "authentic";
+type ViewMode = "table" | "graph";
+
+function NaturalVsArtificialComparison({ data }: { data: AggregationResponse | null }) {
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const params = naturalReference.parameters;
+  const paramKeys = ["ph", "predicted_sugar", "predicted_citric", "predicted_ascorbic"] as const;
+
+  const rows = paramKeys.map((key) => {
+    const ref = params[key];
+    if (!ref) return null;
+    const ourValue = data?.averages
+      ? (data.averages as unknown as Record<string, number | null>)[key] ?? null
+      : null;
+    const inRange =
+      ourValue !== null && ourValue !== undefined
+        ? ourValue >= ref.min && ourValue <= ref.max
+        : null;
+    return {
+      key,
+      label: ref.label,
+      naturalRange: `${ref.min}-${ref.max} ${ref.unit}`,
+      ourValue: ourValue !== null ? `${Number(ourValue).toFixed(4)} ${ref.unit}` : "\u2014",
+      ourValueNum: ourValue as number | null,
+      inRange,
+      ref,
+    };
+  });
+
+  const validRows = rows.filter((r): r is NonNullable<typeof r> => r !== null);
+
+  // Chart data: normalize to 0-100 scale (position within natural range) for comparable display
+  const chartData = validRows.map((row) => {
+    const { min, max, mean, unit } = row.ref;
+    const our = row.ourValueNum;
+    const range = max - min;
+    const naturalNorm = range > 0 ? ((mean - min) / range) * 100 : 50;
+    const ourNorm = our != null && range > 0 ? ((our - min) / range) * 100 : 0;
+    return {
+      name: row.label,
+      natural: Math.min(100, Math.max(0, naturalNorm)),
+      ourProduct: ourNorm,
+      inRange: row.inRange,
+      min,
+      max,
+      unit,
+      ourValue: our,
+    };
+  });
+
   return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "0.35rem 0.75rem",
-        borderRadius: 9999,
-        fontWeight: 700,
-        fontSize: "0.95rem",
-        backgroundColor: isAuthentic ? "#276749" : "#c53030",
-        color: "#fff",
-        textTransform: "capitalize",
-      }}
-      aria-label={`Authenticity: ${status}`}
-    >
-      {status}
-    </span>
+    <div className="dashboard-card" style={{ marginTop: "1.5rem" }}>
+      <div style={{ textAlign: "center", marginBottom: "1rem" }}>
+        <h3 className="dashboard-section-title" style={{ marginBottom: "0.25rem" }}>Natural vs Our Product</h3>
+        <p style={{ fontSize: "0.9rem", color: "#64748b", margin: "0 auto 1rem auto", textAlign: "center", maxWidth: "42rem" }}>
+          Reference values from natural coconut water (DOST PH study &amp; literature). Our product values are from E-Tongue predictions for the selected period.
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setViewMode("table")}
+            style={{
+              padding: "0.4rem 0.75rem",
+              fontSize: "0.85rem",
+              borderRadius: 6,
+              border: "1px solid var(--green-border)",
+              background: viewMode === "table" ? "var(--green-primary)" : "#fff",
+              color: viewMode === "table" ? "#fff" : "#1a1a1a",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            Table
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("graph")}
+            style={{
+              padding: "0.4rem 0.75rem",
+              fontSize: "0.85rem",
+              borderRadius: 6,
+              border: "1px solid var(--green-border)",
+              background: viewMode === "graph" ? "var(--green-primary)" : "#fff",
+              color: viewMode === "graph" ? "#fff" : "#1a1a1a",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            Graph
+          </button>
+        </div>
+      </div>
+
+      {viewMode === "table" ? (
+        <div style={{ overflowX: "auto" }}>
+          <table className="comparison-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #e2e8f0" }}>
+                <th style={{ textAlign: "left", padding: "0.75rem", fontWeight: 600 }}>Parameter</th>
+                <th style={{ textAlign: "left", padding: "0.75rem", fontWeight: 600 }}>Natural (reference)</th>
+                <th style={{ textAlign: "left", padding: "0.75rem", fontWeight: 600 }}>Our product</th>
+                <th style={{ textAlign: "center", padding: "0.75rem", fontWeight: 600 }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {validRows.map((row) => (
+                <tr key={row.key} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                  <td style={{ padding: "0.75rem" }}>{row.label}</td>
+                  <td style={{ padding: "0.75rem" }}>{row.naturalRange}</td>
+                  <td style={{ padding: "0.75rem" }}>{row.ourValue}</td>
+                  <td style={{ padding: "0.75rem", textAlign: "center" }}>
+                    {row.inRange === null ? (
+                      <span style={{ color: "#94a3b8" }}>\u2014</span>
+                    ) : row.inRange ? (
+                      <span style={{ color: "#047857", fontWeight: 600 }}>\u2713 In range</span>
+                    ) : (
+                      <span style={{ color: "#b91c1c", fontWeight: 600 }}>\u2717 Out of range</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <>
+          <p style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.5rem" }}>
+            Bars show position within natural range (0% = min, 100% = max). Green = in range, red = out of range.
+          </p>
+          <div style={{ width: "100%", height: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 10, right: 30, left: 80, bottom: 10 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis type="number" domain={[-10, 110]} tickFormatter={(v) => `${v}%`} />
+                <YAxis type="category" dataKey="name" width={70} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const p = payload[0].payload;
+                    const ourVal = p.ourValue != null ? p.ourValue.toFixed(4) : "\u2014";
+                    return (
+                      <div style={{ background: "#fff", padding: "0.75rem 1rem", borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.15)", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>{p.name}</div>
+                        <div style={{ fontSize: "0.85rem" }}>Natural range: {p.min}–{p.max} {p.unit}</div>
+                        <div style={{ fontSize: "0.85rem" }}>Our product: {ourVal} {p.unit}</div>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 600, color: p.inRange ? "#047857" : "#b91c1c" }}>
+                          {p.inRange ? "\u2713 In range" : "\u2717 Out of range"}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Legend />
+                <Bar dataKey="natural" name="Natural (reference mean)" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar dataKey="ourProduct" name="Our product" radius={[0, 4, 4, 0]} barSize={20}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.inRange ? "#047857" : "#b91c1c"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -50,6 +201,7 @@ export default function Quality() {
   const [week, setWeek] = useState(getISOWeek(new Date()));
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [data, setData] = useState<AggregationResponse | null>(null);
+  const [dailyReadings, setDailyReadings] = useState<DailyReadingRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
@@ -57,9 +209,15 @@ export default function Quality() {
   const loadData = useCallback(async () => {
     setError(null);
     setLoading(true);
+    setDailyReadings([]);
     try {
       if (periodType === "daily") {
-        setData(await fetchDaily(date));
+        const [agg, readings] = await Promise.all([
+          fetchDaily(date),
+          fetchDailyReadings(date),
+        ]);
+        setData(agg);
+        setDailyReadings(readings);
       } else if (periodType === "weekly") {
         setData(await fetchWeekly(year, week));
       } else {
@@ -151,18 +309,13 @@ export default function Quality() {
 
   return (
     <div className="public-quality-page">
-      <section className="public-hero public-hero-sub">
-        <div className="public-hero-solid">
-          <h1>Quality &amp; Methodology</h1>
-          <p>How we ensure authenticity and ingredient transparency</p>
-        </div>
-      </section>
-
       <section className="public-section public-quality-commitment">
-        <h2>Our Commitment to Quality</h2>
-        <p>
-          At Ceylon Coco, quality is at the heart of everything we do. From coconut selection to final packaging, we follow strict quality control procedures to ensure purity, safety, and freshness. Our multi-stage inspection process, hygienic production practices, and advanced monitoring systems guarantee that every bottle delivers the authentic taste of natural coconut water.
-        </p>
+        <div className="public-quality-commitment-inner">
+          <h2>Our Commitment to Quality</h2>
+          <p>
+            At Ceylon Coco, quality is at the heart of everything we do. From coconut selection to final packaging, we follow strict quality control procedures to ensure purity, safety, and freshness. Our multi-stage inspection process, hygienic production practices, and advanced monitoring systems guarantee that every bottle delivers the authentic taste of natural coconut water.
+          </p>
+        </div>
       </section>
 
       {/* Measurement details: period selector, KPIs, bar chart, donut chart (Quality page only) */}
@@ -253,9 +406,6 @@ export default function Quality() {
 
             <div ref={exportRef}>
               <div className="public-quality-export-header">
-                <div className="public-quality-export-header-logo">
-                  <img src="/company-logo.png" alt="Ceylon Coco" />
-                </div>
                 <div className="public-quality-export-header-heading">
                   <h2 className="public-quality-export-header-title">Ceylon Coco (Pvt) Ltd</h2>
                   <p className="public-quality-export-header-sub">Quality Report of {reportPeriodLabel}</p>
@@ -281,13 +431,6 @@ export default function Quality() {
                   <div>
                     <div className="kpi-value">{data.authenticity.adulterated}</div>
                     <div className="kpi-label">Adulterated</div>
-                  </div>
-                </div>
-                <div className="dashboard-card kpi">
-                  <div className="kpi-icon" style={{ background: data.status === "authentic" ? "#d1fae5" : "#fee2e2", color: data.status === "authentic" ? "#047857" : "#b91c1c" }}>◉</div>
-                  <div>
-                    <div className="kpi-value"><AuthenticityBadge status={data.status} /></div>
-                    <div className="kpi-label">Period status</div>
                   </div>
                 </div>
               </div>
@@ -343,6 +486,54 @@ export default function Quality() {
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Natural vs Our Product comparison */}
+              <NaturalVsArtificialComparison data={data} />
+
+              {/* Daily readings table — only when Day is selected */}
+              {periodType === "daily" && dailyReadings.length > 0 && (
+                <div className="public-quality-readings-table-wrap" style={{ marginTop: "1.5rem" }}>
+                  <h3 className="dashboard-section-title" style={{ marginBottom: "0.75rem" }}>Readings for {format(parseISO(date), "dd MMMM yyyy")}</h3>
+                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--green-border)", background: "#fff" }}>
+                    <table className="public-quality-readings-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Reading</th>
+                          <th>Date</th>
+                          <th>Time</th>
+                          <th>pH</th>
+                          <th>Sugar %</th>
+                          <th>Citric %</th>
+                          <th>Ascorbic %</th>
+                          <th>Status</th>
+                          <th>Confidence</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyReadings.map((row) => (
+                          <tr key={row.id}>
+                            <td>{row.id}</td>
+                            <td>{row.reading}</td>
+                            <td>{row.date}</td>
+                            <td>{row.time}</td>
+                            <td>{row.ph.toFixed(2)}</td>
+                            <td>{row.predicted_sugar.toFixed(2)}</td>
+                            <td>{row.predicted_citric.toFixed(2)}</td>
+                            <td>{row.predicted_ascorbic.toFixed(2)}</td>
+                            <td>
+                              <span style={{ color: row.authenticity_status === "authentic" ? "#047857" : "#b91c1c", fontWeight: 600 }}>
+                                {row.authenticity_status === "authentic" ? "Authentic" : "Adulterated"}
+                              </span>
+                            </td>
+                            <td>{row.confidence != null ? row.confidence.toFixed(2) : "\u2014"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

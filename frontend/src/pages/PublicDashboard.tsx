@@ -1,5 +1,3 @@
-import { Link } from "react-router-dom";
-
 /**
  * Public home page — hero and ingredient transparency. Measurement details (graphs, KPIs) are on the Quality page only.
  */
@@ -10,7 +8,6 @@ export default function PublicDashboard() {
         <img src="/hero.jpg" alt="Fresh green coconuts with splashing water" className="public-hero-img" />
         <div className="public-hero-overlay">
           <h1>Smart Coconut Authenticity &amp; Quality Analysis Platform</h1>
-          <p>E-Tongue authenticity &amp; ingredient estimates — see <Link to="/quality">Quality</Link> for measurement details</p>
         </div>
       </section>
 
@@ -34,20 +31,7 @@ export default function PublicDashboard() {
         </p>
         <h3 className="public-welcome-subhead">We are committed to the highest standards of<br />Quality &amp; Food Safety Excellence</h3>
         <p className="public-welcome-body">
-          As a responsible supplier to the global marketplace, we prioritize safety, sustainability, and transparency in everything we do.
-        </p>
-        <p className="public-welcome-body public-welcome-body--intro">Our production processes are designed to</p>
-        <ul className="public-welcome-list">
-          <li>Maintain natural pH balance and electrolyte levels</li>
-          <li>Ensure strict hygiene and contamination control</li>
-          <li>Support environmentally friendly packaging</li>
-          <li>Meet international export quality standards</li>
-        </ul>
-        <p className="public-welcome-body">
-          We continuously invest in innovation and advanced testing systems including sensor-based quality verification to guarantee that every bottle of Ceylon Coco meets the highest standards of purity and freshness.
-        </p>
-        <p className="public-welcome-body">
-          Our commitment is not only to produce safe and healthy beverages but also to protect the environment and support Sri Lankan coconut farmers.
+          As a responsible supplier to the global marketplace, we prioritize safety, sustainability, and transparency in everything we do. We continuously invest in innovation and advanced testing systems including sensor-based quality verification to guarantee that every bottle of Ceylon Coco meets the highest standards of purity and freshness. Our commitment is not only to produce safe and healthy beverages but also to protect the environment and support Sri Lankan coconut farmers.
         </p>
       </section>
 

@@ -54,3 +54,18 @@ class PredictionListSerializer(serializers.ModelSerializer):
             "authenticity_status",
             "confidence",
         )
+
+
+class DailyReadingsSerializer(serializers.Serializer):
+    """Public list for GET /api/daily/readings/ — predictions with reading ph, for Quality page table."""
+
+    id = serializers.IntegerField()
+    reading = serializers.IntegerField()
+    date = serializers.CharField()
+    time = serializers.CharField()
+    ph = serializers.FloatField()
+    predicted_sugar = serializers.FloatField()
+    predicted_citric = serializers.FloatField()
+    predicted_ascorbic = serializers.FloatField()
+    authenticity_status = serializers.CharField()
+    confidence = serializers.FloatField(allow_null=True)

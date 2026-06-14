@@ -3,7 +3,7 @@
  * Uses axios; base URL from VITE_API_BASE_URL (defaults to same origin /api).
  */
 import axios, { AxiosInstance, AxiosError } from "axios";
-import type { AggregationResponse, ApiError, SensorReadingItem, PredictionItem, AlertItem, SystemLogItem } from "./types";
+import type { AggregationResponse, ApiError, DailyReadingRow, SensorReadingItem, PredictionItem, AlertItem, SystemLogItem } from "./types";
 
 const baseURL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
@@ -28,6 +28,14 @@ export function setAuthToken(token: string | null): void {
 /** GET /api/daily/?date=YYYY-MM-DD */
 export async function fetchDaily(date: string): Promise<AggregationResponse> {
   const { data } = await client.get<AggregationResponse>("/daily/", {
+    params: { date },
+  });
+  return data;
+}
+
+/** GET /api/daily/readings/?date=YYYY-MM-DD — list of readings for Quality page table (public) */
+export async function fetchDailyReadings(date: string): Promise<DailyReadingRow[]> {
+  const { data } = await client.get<DailyReadingRow[]>("/daily/readings/", {
     params: { date },
   });
   return data;

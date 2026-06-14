@@ -11,6 +11,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 from readings.views import (
     UploadDataView,
     DailyAggregationView,
+    DailyReadingsListView,
     WeeklyAggregationView,
     MonthlyAggregationView,
     SensorReadingListView,
@@ -23,6 +24,7 @@ urlpatterns = [
     path("auth/token/", obtain_auth_token, name="api-token"),
     path("upload-data/", UploadDataView.as_view(), name="upload-data"),
     path("daily/", DailyAggregationView.as_view(), name="daily"),
+    path("daily/readings/", DailyReadingsListView.as_view(), name="daily-readings"),
     path("weekly/", WeeklyAggregationView.as_view(), name="weekly"),
     path("monthly/", MonthlyAggregationView.as_view(), name="monthly"),
     path("readings/", SensorReadingListView.as_view(), name="readings-list"),

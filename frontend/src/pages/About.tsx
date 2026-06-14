@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import aboutHeroImg from "../assets/about-hero.png";
 
 /**
  * About page — company story and mission (inspired by chl.lk).
@@ -7,7 +8,7 @@ export default function About() {
   return (
     <div className="public-about-page">
       <section className="public-hero public-hero-sub">
-        <img src="/about-hero.png" alt="Organic Ceylon Coco Coconut Water" className="public-hero-img" />
+        <img src={aboutHeroImg} alt="Organic Ceylon Coco Coconut Water" className="public-hero-img" />
         <div className="public-hero-overlay">
           <h1>About Ceylon Coco</h1>
           <p>Authenticity &amp; transparency for coconut water</p>
