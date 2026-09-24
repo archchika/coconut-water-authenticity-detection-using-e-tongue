@@ -35,6 +35,30 @@ cd C:\Users\archchika\Desktop\research\backend
 
 **Double-click alternative:** run `backend\run.bat` (uses venv Python, no activation).
 
+### ESP32 wireless (same WiFi as PC)
+
+**Meaning:** ESP32 POSTs each measurement to Django; after **3 readings** the server runs fusion + ML and saves to the database.
+
+1. PC IP is set in `firmware/include/config.h` as **`10.234.124.31`** (`ML_SERVER_HOST`).
+2. Edit `WIFI_SSID` and `WIFI_PASS` in the same file for your router.
+3. Flash firmware: `cd firmware` → `pio run -t upload`.
+4. Run backend for ESP32 (LAN):
+
+```powershell
+cd C:\Users\archchika\Desktop\research\backend
+.\run-lan.bat
+```
+
+Or manually:
+
+```powershell
+$env:ALLOWED_HOSTS = "localhost,127.0.0.1,10.234.124.31"
+.\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000
+```
+
+5. Allow Windows Firewall inbound on port **8000**.
+6. Trigger **one measurement cycle** on ESP32 (Serial `G` or auto-start). Each cycle POSTs to `http://10.234.124.31:8000/api/esp32-reading/`.
+
 ---
 
 ## Terminal 2 — React frontend (Ceylon Coco)

@@ -14,12 +14,127 @@ import {
 } from "recharts";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { fetchDaily, fetchDailyReadings, fetchWeekly, fetchMonthly, getApiErrorMessage } from "../api/client";
-import type { AggregationResponse, DailyReadingRow } from "../api/types";
+import * as XLSX from "xlsx";
+import { fetchDaily, fetchDailyReadings, fetchWeekly, fetchMonthly, fetchValidationSummary, getApiErrorMessage } from "../api/client";
+import type { AggregationResponse, DailyReadingRow, ValidationSummaryResponse } from "../api/types";
 import { format, getISOWeek, parseISO } from "date-fns";
 import { naturalReference } from "../data/naturalReference";
+import { formatConfidence, confidencePercent } from "../utils/formatConfidence";
 
 type ViewMode = "table" | "graph";
+
+/** Prototype validation session — 100 natural + 100 artificial samples */
+const VALIDATION_DEMO_DATE = "2026-06-30";
+
+function getExportFileBase(periodType: string): string {
+  return `ceylon-coco-quality-${periodType}-${new Date().toISOString().slice(0, 10)}`;
+}
+
+function fmtNum(value: number | null | undefined, digits = 4): string {
+  return value != null ? value.toFixed(digits) : "";
+}
+
+function buildSummaryRows(
+  data: AggregationResponse,
+  reportPeriodLabel: string,
+  periodType: string,
+): string[][] {
+  return [
+    ["Ceylon Coco (Pvt) Ltd - Quality Report"],
+    ["Period", reportPeriodLabel],
+    ["Period type", periodType],
+    [],
+    ["Summary"],
+    ["Total readings", String(data.count)],
+    ["Authentic", String(data.authenticity.authentic)],
+    ["Adulterated", String(data.authenticity.adulterated)],
+    ["Overall status", data.status],
+    [],
+    ["Averaged readings"],
+    ["pH", fmtNum(data.averages.ph)],
+    ["TDS", fmtNum(data.averages.tds)],
+    ["Temperature", fmtNum(data.averages.temperature)],
+    ["Turbidity", fmtNum(data.averages.turbidity)],
+    ["Sugar %", fmtNum(data.averages.predicted_sugar)],
+    ["Citric %", fmtNum(data.averages.predicted_citric)],
+    ["Ascorbic %", fmtNum(data.averages.predicted_ascorbic)],
+  ];
+}
+
+const READING_HEADERS = [
+  "ID",
+  "Reading",
+  "Date",
+  "Time",
+  "pH",
+  "Sugar %",
+  "Citric %",
+  "Ascorbic %",
+  "Status",
+  "Confidence",
+] as const;
+
+function buildReadingRows(dailyReadings: DailyReadingRow[]): string[][] {
+  const rows: string[][] = [READING_HEADERS.slice()];
+  for (const row of dailyReadings) {
+    rows.push([
+      String(row.id),
+      String(row.reading),
+      row.date,
+      row.time,
+      row.ph.toFixed(2),
+      row.predicted_sugar.toFixed(2),
+      row.predicted_citric.toFixed(2),
+      row.predicted_ascorbic.toFixed(2),
+      row.authenticity_status === "authentic" ? "Authentic" : "Adulterated",
+      row.confidence != null ? confidencePercent(row.confidence) : "",
+    ]);
+  }
+  return rows;
+}
+
+function downloadCsv(filename: string, rows: string[][]): void {
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadExcel(
+  filename: string,
+  summaryRows: string[][],
+  dailyReadings: DailyReadingRow[],
+): void {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), "Summary");
+  if (dailyReadings.length > 0) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(
+        dailyReadings.map((row) => ({
+          ID: row.id,
+          Reading: row.reading,
+          Date: row.date,
+          Time: row.time,
+          "pH": row.ph,
+          "Sugar %": row.predicted_sugar,
+          "Citric %": row.predicted_citric,
+          "Ascorbic %": row.predicted_ascorbic,
+          Status: row.authenticity_status === "authentic" ? "Authentic" : "Adulterated",
+          Confidence: row.confidence != null ? confidencePercent(row.confidence) : "",
+        })),
+      ),
+      "Readings",
+    );
+  }
+  XLSX.writeFile(wb, filename);
+}
 
 function NaturalVsArtificialComparison({ data }: { data: AggregationResponse | null }) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -190,6 +305,69 @@ function NaturalVsArtificialComparison({ data }: { data: AggregationResponse | n
   );
 }
 
+function PrototypeValidationPanel({
+  summary,
+  sampleCount,
+}: {
+  summary: ValidationSummaryResponse;
+  sampleCount: number;
+}) {
+  return (
+    <div className="dashboard-card" style={{ marginTop: "1.5rem", border: "1px solid #93c5fd", background: "#eff6ff" }}>
+      <h3 className="dashboard-section-title" style={{ marginBottom: "0.5rem" }}>
+        Prototype validation — {format(parseISO(summary.validation_date), "dd MMMM yyyy")}
+      </h3>
+      <p style={{ fontSize: "0.9rem", color: "#475569", margin: "0 0 1rem 0" }}>
+        E-Tongue ML predictions vs lab reference ({summary.natural_count} natural + {summary.artificial_count} artificial samples).
+        Values differ slightly from lab measurements, as expected on prototype hardware.
+      </p>
+      <div className="dashboard-kpis" style={{ marginBottom: "0.5rem" }}>
+        <div className="dashboard-card kpi">
+          <div>
+            <div className="kpi-value">{summary.overall_accuracy_pct.toFixed(1)}%</div>
+            <div className="kpi-label">Overall accuracy (lab vs ML)</div>
+          </div>
+        </div>
+        <div className="dashboard-card kpi">
+          <div>
+            <div className="kpi-value">{summary.classification_accuracy_pct.toFixed(1)}%</div>
+            <div className="kpi-label">Natural / artificial classification</div>
+          </div>
+        </div>
+        <div className="dashboard-card kpi">
+          <div>
+            <div className="kpi-value">{sampleCount}</div>
+            <div className="kpi-label">Readings loaded</div>
+          </div>
+        </div>
+      </div>
+      <table className="public-quality-readings-table" style={{ fontSize: "0.85rem" }}>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Accuracy vs lab</th>
+            <th>MAPE</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>pH</td>
+            <td>{summary.ph_accuracy_pct.toFixed(1)}%</td>
+            <td>MAE {summary.ph_mae.toFixed(3)}</td>
+          </tr>
+          {Object.entries(summary.parameters).map(([key, val]) => (
+            <tr key={key}>
+              <td>{key.replace("_pct", " %")}</td>
+              <td>{val.accuracy_pct.toFixed(1)}%</td>
+              <td>{val.mape_pct.toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /**
  * Quality page — methodology text + measurement details (period selector, KPIs, graphs).
  * Measurement details (graphs etc.) are only here, not on the home page.
@@ -202,6 +380,7 @@ export default function Quality() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [data, setData] = useState<AggregationResponse | null>(null);
   const [dailyReadings, setDailyReadings] = useState<DailyReadingRow[]>([]);
+  const [validationSummary, setValidationSummary] = useState<ValidationSummaryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
@@ -210,14 +389,24 @@ export default function Quality() {
     setError(null);
     setLoading(true);
     setDailyReadings([]);
+    setValidationSummary(null);
     try {
       if (periodType === "daily") {
-        const [agg, readings] = await Promise.all([
+        const requests: [
+          Promise<AggregationResponse>,
+          Promise<DailyReadingRow[]>,
+          Promise<ValidationSummaryResponse | null>,
+        ] = [
           fetchDaily(date),
           fetchDailyReadings(date),
-        ]);
+          date === VALIDATION_DEMO_DATE
+            ? fetchValidationSummary(date).catch(() => null)
+            : Promise.resolve(null),
+        ];
+        const [agg, readings, validation] = await Promise.all(requests);
         setData(agg);
         setDailyReadings(readings);
+        setValidationSummary(validation);
       } else if (periodType === "weekly") {
         setData(await fetchWeekly(year, week));
       } else {
@@ -253,58 +442,89 @@ export default function Quality() {
         ? `Week ${week}, ${year}`
         : format(new Date(year, month - 1, 1), "MMMM yyyy");
 
-  const handleDownload = async (format: "pdf" | "jpg" | "doc") => {
-    if (!exportRef.current || !data || loading) return;
+  const handleDownload = async (format: "pdf" | "csv" | "excel") => {
+    if (!data || loading) return;
 
-    const element = exportRef.current;
+    const fileBase = getExportFileBase(periodType);
+    const summaryRows = buildSummaryRows(data, reportPeriodLabel, periodType);
 
-    const canvas = await html2canvas(element, {
-      backgroundColor: "#f8f9fa",
-      scale: window.devicePixelRatio > 1 ? 2 : 1.5,
-    });
-    const imgData = canvas.toDataURL("image/jpeg", 0.92);
-    const fileBase = `ceylon-coco-quality-${periodType}-${new Date().toISOString().slice(0, 10)}`;
+    const readingsForExport =
+      periodType === "daily"
+        ? await fetchDailyReadings(date)
+        : dailyReadings;
 
-    if (format === "jpg") {
-      const link = document.createElement("a");
-      link.href = imgData;
-      link.download = `${fileBase}.jpg`;
-      link.click();
+    if (format === "csv") {
+      const rows = [...summaryRows, [], ["Readings"], ...buildReadingRows(readingsForExport)];
+      downloadCsv(`${fileBase}.csv`, rows);
       return;
     }
 
-    if (format === "pdf") {
-      const pdf = new jsPDF("landscape", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
+    if (format === "excel") {
+      downloadExcel(`${fileBase}.xlsx`, summaryRows, readingsForExport);
+      return;
+    }
+
+    const pdf = new jsPDF("portrait", "mm", "a4");
+    const pageW = pdf.internal.pageSize.getWidth();
+    let y = 15;
+
+    pdf.setFontSize(16);
+    const title = "Ceylon Coco Quality Report";
+    pdf.text(title, (pageW - pdf.getTextWidth(title)) / 2, y);
+    y += 10;
+    pdf.setFontSize(10);
+    pdf.text(`Period: ${reportPeriodLabel}`, 14, y);
+    y += 6;
+    pdf.text(`Readings: ${data.count} | Authentic: ${data.authenticity.authentic} | Adulterated: ${data.authenticity.adulterated}`, 14, y);
+    y += 10;
+
+    if (periodType === "daily" && readingsForExport.length > 0) {
+      pdf.text(`All readings (${readingsForExport.length}):`, 14, y);
+      y += 6;
+      const colW = (pageW - 28) / 10;
+      const headers = ["ID", "Reading", "Date", "Time", "pH", "Sugar", "Citric", "Ascorbic", "Status", "Conf"];
+      pdf.setFont("helvetica", "bold");
+      headers.forEach((h, i) => pdf.text(h, 14 + i * colW, y));
+      pdf.setFont("helvetica", "normal");
+      y += 6;
+      for (const row of readingsForExport) {
+        if (y > 270) {
+          pdf.addPage();
+          y = 15;
+        }
+        const cells = [
+          String(row.id),
+          String(row.reading),
+          row.date,
+          row.time,
+          row.ph.toFixed(2),
+          row.predicted_sugar.toFixed(2),
+          row.predicted_citric.toFixed(2),
+          row.predicted_ascorbic.toFixed(2),
+          row.authenticity_status === "authentic" ? "Auth" : "Adult",
+          row.confidence != null ? confidencePercent(row.confidence) : "",
+        ];
+        cells.forEach((v, i) => pdf.text(v.substring(0, 8), 14 + i * colW, y));
+        y += 5;
+      }
+    } else if (exportRef.current) {
+      const canvas = await html2canvas(exportRef.current, {
+        backgroundColor: "#f8f9fa",
+        scale: window.devicePixelRatio > 1 ? 2 : 1.5,
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      const landscape = new jsPDF("landscape", "mm", "a4");
+      const landscapeW = landscape.internal.pageSize.getWidth();
+      const landscapeH = landscape.internal.pageSize.getHeight();
+      const imgWidth = landscapeW;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const y = Math.max(0, (pageHeight - imgHeight) / 2);
-      pdf.addImage(imgData, "JPEG", 0, y, imgWidth, imgHeight);
-      pdf.save(`${fileBase}.pdf`);
+      const imgY = Math.max(0, (landscapeH - imgHeight) / 2);
+      landscape.addImage(imgData, "JPEG", 0, imgY, imgWidth, imgHeight);
+      landscape.save(`${fileBase}.pdf`);
       return;
     }
 
-    const htmlContent = `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Ceylon Coco Quality Results</title>
-  </head>
-  <body>
-    <h1>Ceylon Coco — Quality Results</h1>
-    <p>Period type: ${periodType}</p>
-    <img src="${imgData}" style="max-width: 100%;" alt="Quality results" />
-  </body>
-</html>`;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${fileBase}.doc`;
-    link.click();
-    URL.revokeObjectURL(url);
+    pdf.save(`${fileBase}.pdf`);
   };
 
   return (
@@ -390,17 +610,17 @@ export default function Quality() {
               </button>
               <button
                 type="button"
-                onClick={() => handleDownload("jpg")}
+                onClick={() => handleDownload("excel")}
                 disabled={data.count === 0}
               >
-                JPG
+                Excel
               </button>
               <button
                 type="button"
-                onClick={() => handleDownload("doc")}
+                onClick={() => handleDownload("csv")}
                 disabled={data.count === 0}
               >
-                Word
+                CSV
               </button>
             </div>
 
@@ -529,7 +749,7 @@ export default function Quality() {
                                 {row.authenticity_status === "authentic" ? "Authentic" : "Adulterated"}
                               </span>
                             </td>
-                            <td>{row.confidence != null ? row.confidence.toFixed(2) : "\u2014"}</td>
+                            <td>{formatConfidence(row.confidence)}</td>
                           </tr>
                         ))}
                       </tbody>

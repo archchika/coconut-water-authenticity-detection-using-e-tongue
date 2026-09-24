@@ -16,7 +16,7 @@ except ImportError:
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
-MODEL_PARAMS = {"n_estimators": 200, "max_depth": 10, "random_state": RANDOM_STATE}
+MODEL_PARAMS = {"n_estimators": 300, "max_depth": 12, "random_state": RANDOM_STATE, "min_samples_leaf": 2}
 
 
 def get_models_dir() -> Path:

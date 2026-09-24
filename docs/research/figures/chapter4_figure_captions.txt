@@ -1,0 +1,11 @@
+Suggested APA-style figure captions:
+
+Figure 4.1. Predicted versus actual: sugar from ML_2 (4 sensors); citric and ascorbic from ML_1 (pH + temperature).
+Figure 4.2. Regression metrics (MAE, RMSE, R²) by target — ML_1 for acids, ML_2 for sugar.
+Figure 4.3. Residual plots for sugar, citric acid, and ascorbic acid.
+Figure 4.4. Feature importance for the ML_2 sugar model.
+Figure 4.5. Sensor–composition relationships (TDS–sugar; pH–citric; pH–ascorbic).
+Figure 4.6. Authentic versus adulterated counts (natural-range screening).
+Figure 4.7. Sugar natural-range screening (1.8–7%).
+
+Sugar dataset: combined_sensors_sugar.csv. Acid dataset: ML_1 combined_pH_temp_600.csv. test_size=0.2; random_state=42.

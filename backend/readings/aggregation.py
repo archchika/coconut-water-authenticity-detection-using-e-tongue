@@ -4,11 +4,20 @@ Phase 5.6 — Aggregation helpers: date/week/month range and aggregate query.
 Returns aggregated sensor + prediction averages and authenticity counts for frontend.
 """
 import calendar
-from datetime import datetime, timedelta, timezone as dt_timezone
-from django.utils import timezone as django_timezone
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from django.conf import settings
 from django.db.models import Avg, Count, Q
 
 from .models import SensorReading, Prediction
+
+
+def local_day_bounds(day: date) -> tuple[datetime, datetime]:
+    """Start (inclusive) and end (exclusive) of a calendar day in TIME_ZONE."""
+    tz = ZoneInfo(getattr(settings, "TIME_ZONE", None) or "Asia/Colombo")
+    start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    return start, start + timedelta(days=1)
 
 
 def _round(val):
@@ -51,9 +60,8 @@ def _aggregate_for_querysets(readings_qs, predictions_qs):
 
 
 def aggregate_daily(date):
-    """date: date object (UTC day). Return aggregated stats for that day."""
-    start = django_timezone.make_aware(datetime.combine(date, datetime.min.time()), dt_timezone.utc)
-    end = start + timedelta(days=1)
+    """date: date object (local calendar day). Return aggregated stats for that day."""
+    start, end = local_day_bounds(date)
     readings = SensorReading.objects.filter(timestamp__gte=start, timestamp__lt=end)
     predictions = Prediction.objects.filter(timestamp__gte=start, timestamp__lt=end)
     out = _aggregate_for_querysets(readings, predictions)
@@ -66,7 +74,7 @@ def aggregate_weekly(year, week):
     """year, week: ISO year and week number. Return aggregated stats for that week."""
     # Monday of ISO week (Python 3.8+)
     d = datetime.fromisocalendar(int(year), int(week), 1)
-    start = django_timezone.make_aware(datetime.combine(d.date(), datetime.min.time()), dt_timezone.utc)
+    start, _ = local_day_bounds(d.date())
     end = start + timedelta(days=7)
     readings = SensorReading.objects.filter(timestamp__gte=start, timestamp__lt=end)
     predictions = Prediction.objects.filter(timestamp__gte=start, timestamp__lt=end)
@@ -81,8 +89,8 @@ def aggregate_monthly(year, month):
     start_d = datetime(int(year), int(month), 1).date()
     _, last_day = calendar.monthrange(int(year), int(month))
     end_d = datetime(int(year), int(month), last_day).date() + timedelta(days=1)
-    start = django_timezone.make_aware(datetime.combine(start_d, datetime.min.time()), dt_timezone.utc)
-    end = django_timezone.make_aware(datetime.combine(end_d, datetime.min.time()), dt_timezone.utc)
+    start, _ = local_day_bounds(start_d)
+    end, _ = local_day_bounds(end_d)
     readings = SensorReading.objects.filter(timestamp__gte=start, timestamp__lt=end)
     predictions = Prediction.objects.filter(timestamp__gte=start, timestamp__lt=end)
     out = _aggregate_for_querysets(readings, predictions)

@@ -1,0 +1,2 @@
+Accuracy,Precision_Authentic,Recall_Authentic,F1_Authentic,N_test,N_authentic_actual,N_adulterated_actual
+0.711340206185567,0.5,0.8928571428571429,0.6410256410256411,97,28,69

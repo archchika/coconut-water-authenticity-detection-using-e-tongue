@@ -1,0 +1,26 @@
+{
+  "total_rows": 20,
+  "sensors": {
+    "ph": {
+      "sample_count": 0,
+      "accuracy_pct": null,
+      "note": "No paired lab/sensor values found in CSV"
+    },
+    "tds_ppm": {
+      "sample_count": 0,
+      "accuracy_pct": null,
+      "note": "No paired lab/sensor values found in CSV"
+    },
+    "turbidity_ntu": {
+      "sample_count": 0,
+      "accuracy_pct": null,
+      "note": "No paired lab/sensor values found in CSV"
+    },
+    "temperature_c": {
+      "sample_count": 0,
+      "accuracy_pct": null,
+      "note": "No paired lab/sensor values found in CSV"
+    }
+  },
+  "overall_sensor_accuracy_pct": null
+}

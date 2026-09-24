@@ -2,6 +2,16 @@
 
 Random Forest model: **input** pH and temperature → **output** citric acid % and ascorbic acid % (w/v).
 
+Training data is built from **coconut-water maturation literature curves**
+(pH vs titratable acidity / citric %, and pH vs ascorbic acid mg/100 mL → % w/v).
+
+Generate / refresh dataset:
+
+```bash
+python generate_coconut_acid_literature_dataset.py
+python ML_1/train_model.py
+```
+
 ## Folder structure (Phase 3.6)
 
 ```

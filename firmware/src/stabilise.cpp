@@ -15,6 +15,9 @@ void stabilise_start(void) {
   s_count = 0;
   s_start_ms = millis();
   s_last_check_ms = s_start_ms;
+#if !ENABLE_PH_SENSOR
+  s_count = STABILIZE_READINGS;
+#endif
 }
 
 void stabilise_tick(void) {

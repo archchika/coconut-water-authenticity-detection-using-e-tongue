@@ -18,6 +18,7 @@ static const char* const S_NAMES[] = {
 static State_t s_state = STATE_IDLE;
 static bool s_start_requested = false;
 static SensorReading_t s_last_reading = { 0 };
+static SensorReading_t s_batch[ML_BATCH_READINGS];
 static unsigned long s_phase_start_ms = 0;       // For RINSING / DRYING duration
 
 const char* state_name(State_t s) {
@@ -58,22 +59,35 @@ void state_machine_tick(void) {
       break;
 
     case STATE_DETECTING: {
-      // Blocking 3-time averaged read (Phase 1.3)
-      s_last_reading = sensors_read_averaged();
+      // Three snapshots per cycle for backend fusion batch (wireless POST)
+      bool any_alert = false;
+      for (int i = 0; i < ML_BATCH_READINGS; i++) {
+        s_batch[i] = sensors_read_averaged();
+        s_last_reading = s_batch[i];
+        if (alerts_check_thresholds(&s_batch[i]))
+          any_alert = true;
+        if (i < ML_BATCH_READINGS - 1)
+          delay(ML_BATCH_GAP_MS);
+      }
       state_set(STATE_READ_COMPLETE);
-      // Phase 1.5: threshold check; buzzer on if out of safe range
-      if (alerts_check_thresholds(&s_last_reading))
+      if (any_alert)
         alert_buzzer_on();
       break;
     }
 
     case STATE_READ_COMPLETE: {
-      // Phase 1.6: Serial JSON log and HTTP POST to local ML server (with retry)
-      const char* status = alerts_check_thresholds(&s_last_reading) ? "threshold_alert" : "unknown";
-      transport_serial_log(&s_last_reading, status);
-      (void)transport_post_reading(&s_last_reading, status);
+      // Serial log + WiFi POST each snapshot (server buffers 3 → fusion → ML → DB)
+      for (int i = 0; i < ML_BATCH_READINGS; i++) {
+        const char* row_status = alerts_check_thresholds(&s_batch[i]) ? "threshold_alert" : "unknown";
+        transport_serial_log(&s_batch[i], row_status);
+        (void)transport_post_reading(&s_batch[i], row_status);
+      }
       alert_buzzer_off();  // Silence before cleaning phase
+#if SKIP_CLEANING_CYCLE
+      state_set(STATE_IDLE);
+#else
       state_set(STATE_CLEANING);
+#endif
       break;
     }
 

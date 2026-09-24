@@ -16,12 +16,12 @@ export const naturalReference = {
     },
     predicted_citric: { min: 0.04, max: 0.15, mean: 0.08, unit: "%", label: "Citric acid %" },
     predicted_ascorbic: {
-      min: 0.00015,
-      max: 0.00035,
-      mean: 0.00025,
+      min: 0.0008,
+      max: 0.0035,
+      mean: 0.0018,
       unit: "%",
       label: "Ascorbic acid %",
-      note: "1.80-2.92 µg/mL (natural coconut water)",
+      note: "0.95–3.2 mg/100 mL from coconut-water maturation literature",
     },
   },
   dostStats: {

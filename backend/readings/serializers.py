@@ -69,3 +69,81 @@ class DailyReadingsSerializer(serializers.Serializer):
     predicted_ascorbic = serializers.FloatField()
     authenticity_status = serializers.CharField()
     confidence = serializers.FloatField(allow_null=True)
+    sample_id = serializers.CharField(required=False, allow_null=True)
+    sample_type = serializers.CharField(required=False, allow_null=True)
+    lab_ph = serializers.FloatField(required=False, allow_null=True)
+    lab_sugar_pct = serializers.FloatField(required=False, allow_null=True)
+    lab_citric_pct = serializers.FloatField(required=False, allow_null=True)
+    lab_ascorbic_pct = serializers.FloatField(required=False, allow_null=True)
+
+
+class ValidationSummarySerializer(serializers.Serializer):
+    """GET /api/validation/summary/ — prototype validation metrics for a date."""
+
+    validation_date = serializers.CharField()
+    sample_count = serializers.IntegerField()
+    natural_count = serializers.IntegerField()
+    artificial_count = serializers.IntegerField()
+    overall_accuracy_pct = serializers.FloatField()
+    ph_accuracy_pct = serializers.FloatField()
+    ph_mae = serializers.FloatField()
+    classification_accuracy_pct = serializers.FloatField()
+    parameters = serializers.DictField()
+
+
+class PredictInputSerializer(serializers.Serializer):
+    """POST /api/predict/ — sensor inputs for ML inference."""
+
+    pH = serializers.FloatField(required=True)
+    tds = serializers.FloatField(required=True)
+    temperature = serializers.FloatField(required=True)
+    turbidity = serializers.FloatField(required=True)
+
+    def to_internal_value(self, data):
+        if "ph" in data and "pH" not in data:
+            data = {**data, "pH": data["ph"]}
+        return super().to_internal_value(data)
+
+
+class PredictBatchSerializer(serializers.Serializer):
+    """POST /api/predict-batch/ — three raw sensor snapshots."""
+
+    readings = serializers.ListField(
+        child=PredictInputSerializer(),
+        min_length=3,
+        max_length=3,
+    )
+
+
+class Esp32ReadingSerializer(serializers.Serializer):
+    """POST /api/esp32-reading/ — single ESP32 JSON line (wireless)."""
+
+    timestamp_ms = serializers.IntegerField(required=False)
+    pH = serializers.FloatField(required=True)
+    tds = serializers.FloatField(required=True)
+    temperature = serializers.FloatField(required=True)
+    turbidity = serializers.FloatField(required=True)
+    status = serializers.CharField(required=False, allow_blank=True, default="unknown")
+    source_device_id = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+
+    def to_internal_value(self, data):
+        if "ph" in data and "pH" not in data:
+            data = {**data, "pH": data["ph"]}
+        return super().to_internal_value(data)
+
+
+class Esp32RobotStatusSerializer(serializers.Serializer):
+    """POST /api/esp32-status/ — current robotic-arm station."""
+
+    stage = serializers.ChoiceField(
+        choices=(
+            "initial_position",
+            "detection_station",
+            "cleaning_station",
+            "drying_station",
+            "idle",
+        )
+    )
+    source_device_id = serializers.CharField(
+        max_length=64, required=False, allow_blank=True, default=""
+    )

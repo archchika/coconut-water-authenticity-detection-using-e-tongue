@@ -14,7 +14,7 @@ input:
   http:
     host: "0.0.0.0"
     port: 8000
-    path: "/api/reading" # ESP32 POSTs here; pipeline reads from queue
+    path: "/api/esp32-reading/" # ESP32 POSTs here; buffers 3 then fusion+ML
 
 # Pipeline: used in Phase 2.2–2.5
 pipeline:

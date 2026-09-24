@@ -14,6 +14,7 @@ const SIDE_NAV = [
   { path: "/admin/readings", label: "Sensor readings" },
   { path: "/admin/predictions", label: "Predictions" },
   { path: "/admin/logs", label: "Defects", showBadge: true },
+  { path: "/admin/graphs", label: "Graph" },
 ];
 
 export default function AdminLayout() {

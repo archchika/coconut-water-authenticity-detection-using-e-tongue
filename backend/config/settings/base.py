@@ -11,7 +11,14 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-phase53-dev-change-in-production")
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get(
+        "ALLOWED_HOSTS",
+        "localhost,127.0.0.1,10.216.217.31,10.234.124.31,192.168.137.1",
+    ).split(",")
+    if h.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -66,7 +73,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Colombo"
 USE_I18N = True
 USE_TZ = True
 

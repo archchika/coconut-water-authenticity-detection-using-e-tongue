@@ -3,7 +3,7 @@
  * Uses axios; base URL from VITE_API_BASE_URL (defaults to same origin /api).
  */
 import axios, { AxiosInstance, AxiosError } from "axios";
-import type { AggregationResponse, ApiError, DailyReadingRow, SensorReadingItem, PredictionItem, AlertItem, SystemLogItem } from "./types";
+import type { AggregationResponse, ApiError, DailyReadingRow, SensorReadingItem, PredictionItem, AlertItem, SystemLogItem, MLPredictResponse, MLPredictBatchResponse, Esp32LiveResponse, ValidationSummaryResponse } from "./types";
 
 const baseURL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
@@ -11,6 +11,13 @@ const baseURL =
 const apiPrefix = baseURL ? `${baseURL}/api` : "/api";
 
 const client: AxiosInstance = axios.create({
+  baseURL: apiPrefix,
+  headers: { "Content-Type": "application/json" },
+  timeout: 15000,
+});
+
+/** No auth header — DRF returns 401 on AllowAny views if a bad/expired Token is sent. */
+const publicClient: AxiosInstance = axios.create({
   baseURL: apiPrefix,
   headers: { "Content-Type": "application/json" },
   timeout: 15000,
@@ -27,7 +34,7 @@ export function setAuthToken(token: string | null): void {
 
 /** GET /api/daily/?date=YYYY-MM-DD */
 export async function fetchDaily(date: string): Promise<AggregationResponse> {
-  const { data } = await client.get<AggregationResponse>("/daily/", {
+  const { data } = await publicClient.get<AggregationResponse>("/daily/", {
     params: { date },
   });
   return data;
@@ -35,7 +42,15 @@ export async function fetchDaily(date: string): Promise<AggregationResponse> {
 
 /** GET /api/daily/readings/?date=YYYY-MM-DD — list of readings for Quality page table (public) */
 export async function fetchDailyReadings(date: string): Promise<DailyReadingRow[]> {
-  const { data } = await client.get<DailyReadingRow[]>("/daily/readings/", {
+  const { data } = await publicClient.get<DailyReadingRow[]>("/daily/readings/", {
+    params: { date },
+  });
+  return data;
+}
+
+/** GET /api/validation/summary/?date=YYYY-MM-DD — prototype validation metrics */
+export async function fetchValidationSummary(date: string): Promise<ValidationSummaryResponse> {
+  const { data } = await publicClient.get<ValidationSummaryResponse>("/validation/summary/", {
     params: { date },
   });
   return data;
@@ -46,7 +61,7 @@ export async function fetchWeekly(
   year: number,
   week: number
 ): Promise<AggregationResponse> {
-  const { data } = await client.get<AggregationResponse>("/weekly/", {
+  const { data } = await publicClient.get<AggregationResponse>("/weekly/", {
     params: { year, week },
   });
   return data;
@@ -57,7 +72,7 @@ export async function fetchMonthly(
   year: number,
   month: number
 ): Promise<AggregationResponse> {
-  const { data } = await client.get<AggregationResponse>("/monthly/", {
+  const { data } = await publicClient.get<AggregationResponse>("/monthly/", {
     params: { year, month },
   });
   return data;
@@ -118,6 +133,31 @@ export async function fetchLogs(params: {
   limit?: number;
 }): Promise<SystemLogItem[]> {
   const { data } = await client.get<SystemLogItem[]>("/logs/", { params });
+  return data;
+}
+
+/** POST /api/predict-batch/ — first 3 readings → fusion → ML */
+export async function fetchPredictBatch(
+  readings: Array<{ pH: number; tds: number; temperature: number; turbidity: number }>
+): Promise<MLPredictBatchResponse> {
+  const { data } = await client.post<MLPredictBatchResponse>("/predict-batch/", { readings });
+  return data;
+}
+
+/** GET /api/esp32-live/ — live ESP32 buffer + current sensor snapshot */
+export async function fetchEsp32Live(): Promise<Esp32LiveResponse> {
+  const { data } = await publicClient.get<Esp32LiveResponse>("/esp32-live/");
+  return data;
+}
+
+/** POST /api/predict/ — ML_1 + ML_2 composition from sensor readings */
+export async function fetchPredictComposition(body: {
+  pH: number;
+  tds: number;
+  temperature: number;
+  turbidity: number;
+}): Promise<MLPredictResponse> {
+  const { data } = await client.post<MLPredictResponse>("/predict/", body);
   return data;
 }
 

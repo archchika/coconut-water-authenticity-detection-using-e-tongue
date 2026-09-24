@@ -1,79 +1,64 @@
 /**
- * E-Tongue ESP32 — Main entry (Phase 1.10 integration)
- *
- * Setup: sensors (load NVS cal), alerts, cleaning, state_machine, transport (WiFi).
- * Loop: state_machine_tick(); Serial commands (G=start, C=calibration, S=save, Q=quit);
- *       state change and READ_COMPLETE printing.
- * See STATE_DIAGRAM.md and CALIBRATION_PROCEDURE.md.
+ * E-Tongue ESP32 — sensor_full mode: pH + TDS + temp + turbidity every 10 s.
  */
 #include <Arduino.h>
 #include "config.h"
 #include "sensors.h"
-#include "state_machine.h"
-#include "alerts.h"
+#include "sensor_full.h"
 #include "transport.h"
-#include "cleaning.h"
 #include "calibration.h"
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
   delay(500);
-  Serial.println(F("E-Tongue ESP32 — Phase 1.9 calibration ready"));
-  sensors_load_calibration();
-  alerts_init();
-  cleaning_init();
-  state_machine_init();
+  Serial.println(F("E-Tongue ESP32 — sensor_full mode (10s cycle)"));
+  Serial.println(F("Pins: pH D35 | TDS D32 | Temp D4 | Turb D34"));
+
+  sensors_init();
   transport_wifi_connect();
+  transport_wifi_print_status();
+  sensor_full_init();
+
+  Serial.println(F("Serial: F=send | P=pH7 water | T=clear turb | Z=reset | W=WiFi | C=cal"));
 }
 
 void loop() {
-  state_machine_tick();
+  static bool cal_mode = false;
 
-  // Optional: request start via Serial (send 'G' or 'g') or auto-start once after 5 s in IDLE
-  static unsigned long last_auto_start = 0;
-  if (state_get() == STATE_IDLE) {
-    if (last_auto_start == 0) last_auto_start = millis();
-    if (Serial.available()) {
-      int c = Serial.read();
-      if (c == 'G' || c == 'g') state_machine_request_start();
-      else if (c == 'C' || c == 'c') {
-        state_set(STATE_CALIBRATION);
-        calibration_print_help();
-      }
-    }
-    else if ((unsigned long)(millis() - last_auto_start) > 5000) {
-      state_machine_request_start();
-      last_auto_start = millis();
-    }
-  } else if (state_get() == STATE_CALIBRATION) {
-    if (Serial.available()) {
-      int c = Serial.read();
+  sensor_full_tick();
+
+  if (Serial.available()) {
+    int c = Serial.read();
+    if (cal_mode) {
       if (c == 'S' || c == 's') {
         calibration_run();
-        state_set(STATE_IDLE);
+        cal_mode = false;
+        Serial.println(F("Calibration saved. Resuming 10s cycles."));
       } else if (c == 'Q' || c == 'q') {
+        cal_mode = false;
         Serial.println(F("Calibration cancelled."));
-        state_set(STATE_IDLE);
       }
+    } else if (c == 'W' || c == 'w') {
+      transport_wifi_reconnect();
+      transport_wifi_print_status();
+    } else if (c == 'F' || c == 'f') {
+      Serial.println(F("[F] Immediate read + send"));
+      sensor_full_read_and_send();
+    } else if (c == 'S' || c == 's') {
+      sensor_full_print_status();
+    } else if (c == 'C' || c == 'c') {
+      cal_mode = true;
+      calibration_print_help();
+    } else if (c == 'Z' || c == 'z') {
+      sensors_reset_calibration();
+    } else if (c == 'P' || c == 'p') {
+      Serial.println(F("[P] pH neutral — use plain/tap water (NOT lemon). Wait 30s, then send P..."));
+      sensors_calibrate_ph_neutral();
+    } else if (c == 'T' || c == 't') {
+      Serial.println(F("[T] Turbidity clear — use plain clear water (NOT lemon). Wait 30s, then send T..."));
+      sensors_calibrate_turbidity_clear();
     }
-  } else {
-    last_auto_start = 0;
   }
 
-  // Print state and, when READ_COMPLETE, last reading
-  static State_t prev_state = STATE_COUNT;
-  if (state_get() != prev_state) {
-    prev_state = state_get();
-    Serial.println(state_name(state_get()));
-    if (state_get() == STATE_READ_COMPLETE) {
-      SensorReading_t r;
-      state_machine_get_last_reading(&r);
-      Serial.print(F("  pH=")); Serial.print(r.ph);
-      Serial.print(F(" TDS=")); Serial.print(r.tds);
-      Serial.print(F(" T=")); Serial.print(r.temp);
-      Serial.print(F(" Turb=")); Serial.println(r.turbidity);
-    }
-  }
-
-  delay(100);
+  delay(50);
 }

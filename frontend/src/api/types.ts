@@ -68,6 +68,128 @@ export interface DailyReadingRow {
   predicted_ascorbic: number;
   authenticity_status: string;
   confidence: number | null;
+  sample_id?: string | null;
+  sample_type?: string | null;
+  lab_ph?: number | null;
+  lab_sugar_pct?: number | null;
+  lab_citric_pct?: number | null;
+  lab_ascorbic_pct?: number | null;
+}
+
+/** GET /api/validation/summary/ — June 30 prototype validation */
+export interface ValidationSummaryResponse {
+  validation_date: string;
+  sample_count: number;
+  natural_count: number;
+  artificial_count: number;
+  overall_accuracy_pct: number;
+  ph_accuracy_pct: number;
+  ph_mae: number;
+  classification_accuracy_pct: number;
+  parameters: Record<string, { mape_pct: number; accuracy_pct: number }>;
+}
+
+/** POST /api/predict/ — ML inference from sensor inputs */
+export interface MLPredictResponse {
+  pH: number;
+  tds: number;
+  temperature: number;
+  turbidity: number;
+  predicted_sugar: number;
+  predicted_citric: number;
+  predicted_ascorbic: number;
+  authenticity_status: "authentic" | "adulterated";
+}
+
+/** POST /api/predict-batch/ — three readings after fusion + ML */
+export interface MLPredictBatchResponse {
+  readings: MLPredictResponse[];
+  fused_sensors: Array<{
+    pH: number;
+    tds: number;
+    temperature: number;
+    turbidity: number;
+  }>;
+  average: MLPredictResponse;
+}
+
+export type RobotStage =
+  | "initial_position"
+  | "detection_station"
+  | "cleaning_station"
+  | "drying_station";
+
+/** GET /api/esp32-live/ — live buffer, robot stage, and sensor values */
+export interface Esp32LiveResponse {
+  buffered_count: number;
+  required_count: number;
+  buffered_readings?: Array<{
+    pH: number;
+    tds: number;
+    temperature: number;
+    turbidity: number;
+    predicted_sugar?: number;
+    predicted_citric?: number;
+    predicted_ascorbic?: number;
+    authenticity_status?: string;
+    source_device_id?: string | null;
+  }>;
+  current: {
+    pH: number;
+    tds: number;
+    temperature: number;
+    turbidity: number;
+    source_device_id?: string | null;
+  } | null;
+  latest_saved: {
+    id: number;
+    timestamp: string;
+    pH: number;
+    tds: number;
+    temperature: number;
+    turbidity: number;
+    source_device_id: string | null;
+  } | null;
+  robot_status: {
+    stage: RobotStage;
+    source_device_id: string | null;
+    updated_at: string;
+  } | null;
+  /** Last rinse-station sensor snapshot for cleaning verification */
+  latest_cleaning?: {
+    pH: number;
+    tds: number;
+    temperature: number;
+    turbidity: number;
+    source_device_id?: string | null;
+    updated_at?: string;
+  } | null;
+  completed_batch?: {
+    readings: Array<{
+      pH: number;
+      tds: number;
+      temperature: number;
+      turbidity: number;
+      predicted_sugar?: number;
+      predicted_citric?: number;
+      predicted_ascorbic?: number;
+      authenticity_status?: string;
+      confidence?: number;
+    }>;
+    average: {
+      pH: number;
+      tds: number;
+      temperature: number;
+      turbidity: number;
+      predicted_sugar?: number;
+      predicted_citric?: number;
+      predicted_ascorbic?: number;
+      authenticity_status?: string;
+      confidence?: number;
+    };
+    timestamp?: string;
+    device_id?: string;
+  } | null;
 }
 
 /** Phase 6.6 — GET /api/alerts/ list item */

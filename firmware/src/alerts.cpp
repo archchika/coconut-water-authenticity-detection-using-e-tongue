@@ -11,7 +11,9 @@ void alerts_init(void) {
 
 bool alerts_check_thresholds(const SensorReading_t* r) {
   if (!r) return false;
+#if ENABLE_PH_SENSOR
   if (r->ph < PH_MIN_SAFE || r->ph > PH_MAX_SAFE) return true;
+#endif
   if (r->tds < TDS_MIN_SAFE || r->tds > TDS_MAX_SAFE) return true;
   if (r->temp < TEMP_MIN_SAFE || r->temp > TEMP_MAX_SAFE) return true;
   if (r->turbidity < TURBIDITY_MIN_SAFE || r->turbidity > TURBIDITY_MAX_SAFE) return true;

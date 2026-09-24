@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone as django_tz
 
 from readings.models import SensorReading, Prediction
+from readings.ml_inference import compute_confidence
 from alerts.models import Alert
 from logs.models import SystemLog
 
@@ -78,7 +79,7 @@ class Command(BaseCommand):
                 predicted_citric=citric,
                 predicted_ascorbic=ascorbic,
                 authenticity_status=status,
-                confidence=0.92 if status == "authentic" else 0.88,
+                confidence=compute_confidence(sugar, citric, ascorbic, ph=ph),
             )
             if status == "adulterated":
                 Alert.objects.create(

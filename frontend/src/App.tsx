@@ -25,6 +25,7 @@ function App() {
           <Route path="readings" element={<AdminDashboard />} />
           <Route path="predictions" element={<AdminDashboard />} />
           <Route path="logs" element={<AdminDashboard />} />
+          <Route path="graphs" element={<AdminDashboard />} />
         </Route>
       </Routes>
     </AuthProvider>

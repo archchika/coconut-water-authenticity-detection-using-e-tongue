@@ -14,8 +14,8 @@
 static void build_json_body(const SensorReading_t* r, const char* status, char* buf, size_t size) {
   unsigned long ts = millis();
   (void)snprintf(buf, size,
-    "{\"timestamp_ms\":%lu,\"pH\":%.2f,\"tds\":%.1f,\"temperature\":%.1f,\"turbidity\":%.1f,\"status\":\"%s\"}",
-    ts, r->ph, r->tds, r->temp, r->turbidity, status ? status : "unknown");
+    "{\"timestamp_ms\":%lu,\"pH\":%.2f,\"tds\":%.1f,\"temperature\":%.1f,\"turbidity\":%.1f,\"status\":\"%s\",\"source_device_id\":\"%s\"}",
+    ts, r->ph, r->tds, r->temp, r->turbidity, status ? status : "unknown", SOURCE_DEVICE_ID);
 }
 
 void transport_serial_log(const SensorReading_t* r, const char* status) {
@@ -27,11 +27,42 @@ void transport_serial_log(const SensorReading_t* r, const char* status) {
 
 void transport_wifi_connect(void) {
   if (WiFi.status() == WL_CONNECTED) return;
+
+  Serial.printf("[WiFi] Connecting to \"%s\"...\n", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true);
+  delay(100);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+
   unsigned long t0 = millis();
   while (WiFi.status() != WL_CONNECTED && (unsigned long)(millis() - t0) < (unsigned long)WIFI_CONNECT_TIMEOUT_MS) {
     delay(200);
+    Serial.print('.');
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[WiFi] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[WiFi] Server: http://%s:%u%s\n", ML_SERVER_HOST, (unsigned)ML_SERVER_PORT, ML_POST_PATH);
+  } else {
+    Serial.printf("[WiFi] Failed (status=%d). Check SSID/password in config.h\n", (int)WiFi.status());
+  }
+}
+
+void transport_wifi_reconnect(void) {
+  WiFi.disconnect(true);
+  delay(200);
+  transport_wifi_connect();
+}
+
+void transport_wifi_print_status(void) {
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[WiFi] OK | SSID=%s | IP=%s | RSSI=%d dBm\n",
+                  WiFi.SSID().c_str(),
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.RSSI());
+  } else {
+    Serial.printf("[WiFi] Not connected (status=%d)\n", (int)WiFi.status());
   }
 }
 
@@ -67,10 +98,11 @@ bool transport_post_reading(const SensorReading_t* r, const char* status) {
       continue;
     }
     http.addHeader("Content-Type", "application/json");
-    int code = http.POST((const uint8_t*)body, strlen(body));
+    int code = http.POST((uint8_t*)body, strlen(body));
     last_code = code;
     http.end();
     if (code == HTTP_CODE_OK || code == HTTP_CODE_CREATED || code == HTTP_CODE_ACCEPTED) {
+      Serial.printf("[transport] POST OK HTTP %d -> %s\n", code, url);
       return true;
     }
     Serial.printf("[transport] POST attempt %d failed: HTTP %d\n", attempt + 1, code);

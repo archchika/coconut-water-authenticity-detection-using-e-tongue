@@ -24,8 +24,21 @@ from .serializers import (
     SensorReadingListSerializer,
     PredictionListSerializer,
     DailyReadingsSerializer,
+    ValidationSummarySerializer,
+    PredictInputSerializer,
+    PredictBatchSerializer,
+    Esp32ReadingSerializer,
+    Esp32RobotStatusSerializer,
 )
-from .aggregation import aggregate_daily, aggregate_weekly, aggregate_monthly
+from .aggregation import aggregate_daily, aggregate_weekly, aggregate_monthly, local_day_bounds
+from .june30_validation import VALIDATION_DATE, load_json, sample_lookup
+from .ml_inference import predict_composition, predict_batch, compute_confidence
+from .esp32_ingest import (
+    process_esp32_reading,
+    get_live_status,
+    update_robot_stage,
+    clear_live_session,
+)
 from alerts.models import Alert
 from logs.models import SystemLog
 from core.constants import SENSOR_RANGES
@@ -66,7 +79,14 @@ class UploadDataView(APIView):
             predicted_citric=data["predicted_citric"],
             predicted_ascorbic=data["predicted_ascorbic"],
             authenticity_status=data["status"],
-            confidence=data.get("confidence"),
+            confidence=data.get("confidence")
+            if data.get("confidence") is not None
+            else compute_confidence(
+                data["predicted_sugar"],
+                data["predicted_citric"],
+                data["predicted_ascorbic"],
+                ph=data.get("pH"),
+            ),
         )
 
         # Phase 5.8: log abnormal cases — adulteration
@@ -210,25 +230,18 @@ class MonthlyAggregationView(APIView):
 
 
 def _parse_date_range(request):
-    """Parse optional date_from, date_to (YYYY-MM-DD) from query params. Returns (start, end) or (None, None)."""
+    """Parse optional date_from, date_to (YYYY-MM-DD) as local calendar days. Returns (start, end exclusive)."""
     date_from = request.query_params.get("date_from")
     date_to = request.query_params.get("date_to")
     start, end = None, None
     if date_from:
         try:
-            start = timezone.make_aware(
-                datetime.strptime(date_from, "%Y-%m-%d"),
-                timezone=dt_timezone.utc,
-            )
+            start, _ = local_day_bounds(datetime.strptime(date_from, "%Y-%m-%d").date())
         except ValueError:
             pass
     if date_to:
         try:
-            end = timezone.make_aware(
-                datetime.strptime(date_to, "%Y-%m-%d"),
-                timezone=dt_timezone.utc,
-            )
-            end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+            _, end = local_day_bounds(datetime.strptime(date_to, "%Y-%m-%d").date())
         except ValueError:
             pass
     return start, end
@@ -253,26 +266,20 @@ class DailyReadingsListView(APIView):
                 {"error": "Invalid date; use YYYY-MM-DD"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        start = timezone.make_aware(
-            datetime.combine(date, datetime.min.time()),
-            timezone=dt_timezone.utc,
-        )
-        end = timezone.make_aware(
-            datetime.combine(date, datetime.max.time()),
-            timezone=dt_timezone.utc,
-        )
+        start, end = local_day_bounds(date)
         predictions = (
-            Prediction.objects.filter(timestamp__gte=start, timestamp__lte=end)
+            Prediction.objects.filter(timestamp__gte=start, timestamp__lt=end)
             .select_related("reading")
             .order_by("-timestamp")
         )
+        ref_by_sample = sample_lookup() if date_str == VALIDATION_DATE else {}
         rows = []
         for p in predictions:
             reading = p.reading
             dt = p.timestamp
             if timezone.is_aware(dt):
                 dt = timezone.localtime(dt)
-            rows.append({
+            row = {
                 "id": p.id,
                 "reading": p.reading_id,
                 "date": dt.strftime("%Y-%m-%d"),
@@ -283,8 +290,47 @@ class DailyReadingsListView(APIView):
                 "predicted_ascorbic": p.predicted_ascorbic,
                 "authenticity_status": p.authenticity_status,
                 "confidence": p.confidence,
-            })
+            }
+            sample_id = reading.source_device_id if reading else None
+            if sample_id and sample_id in ref_by_sample:
+                ref = ref_by_sample[sample_id]
+                row.update({
+                    "sample_id": sample_id,
+                    "sample_type": ref["type"],
+                    "lab_ph": ref["lab_ph"],
+                    "lab_sugar_pct": ref["lab_sugar_pct"],
+                    "lab_citric_pct": ref["lab_citric_pct"],
+                    "lab_ascorbic_pct": ref["lab_ascorbic_pct"],
+                })
+            rows.append(row)
         serializer = DailyReadingsSerializer(rows, many=True)
+        return Response(serializer.data)
+
+
+class ValidationSummaryView(APIView):
+    """GET /api/validation/summary/?date=YYYY-MM-DD — prototype lab vs ML accuracy summary."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        date_str = request.query_params.get("date", VALIDATION_DATE)
+        if date_str != VALIDATION_DATE:
+            return Response(
+                {"error": f"Validation summary only available for {VALIDATION_DATE}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            data = load_json()
+        except OSError:
+            return Response(
+                {"error": "Validation dataset not found. Run: python manage.py load_june30_validation"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        payload = {
+            "validation_date": data["validation_date"],
+            **data["metrics"],
+        }
+        serializer = ValidationSummarySerializer(payload)
         return Response(serializer.data)
 
 
@@ -299,8 +345,8 @@ class SensorReadingListView(APIView):
         if start:
             qs = qs.filter(timestamp__gte=start)
         if end:
-            qs = qs.filter(timestamp__lte=end)
-        limit = min(int(request.query_params.get("limit", 50)), 500)
+            qs = qs.filter(timestamp__lt=end)
+        limit = min(int(request.query_params.get("limit", 50)), 1000)
         qs = qs[:limit]
         serializer = SensorReadingListSerializer(qs, many=True)
         return Response(serializer.data)
@@ -317,11 +363,131 @@ class PredictionListView(APIView):
         if start:
             qs = qs.filter(timestamp__gte=start)
         if end:
-            qs = qs.filter(timestamp__lte=end)
+            qs = qs.filter(timestamp__lt=end)
         status_val = request.query_params.get("status")
         if status_val in ("authentic", "adulterated"):
             qs = qs.filter(authenticity_status=status_val)
-        limit = min(int(request.query_params.get("limit", 50)), 500)
+        limit = min(int(request.query_params.get("limit", 50)), 1000)
         qs = qs[:limit]
         serializer = PredictionListSerializer(qs, many=True)
         return Response(serializer.data)
+
+
+class PredictCompositionView(APIView):
+    """POST /api/predict/ — ML_1 + ML_2 inference from sensor readings. Public (admin UI)."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PredictInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        try:
+            result = predict_composition(
+                ph=data["pH"],
+                tds=data["tds"],
+                temperature=data["temperature"],
+                turbidity=data["turbidity"],
+            )
+            return Response(result)
+        except FileNotFoundError as e:
+            return Response(
+                {"error": str(e), "detail": "Train ML models: python ML_1/train_model.py && python ML_2/train_model.py"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Prediction failed: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class PredictBatchView(APIView):
+    """POST /api/predict-batch/ — fuse + ML on first 3 raw sensor snapshots."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PredictBatchSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            raw = serializer.validated_data["readings"]
+            result = predict_batch(raw)
+            return Response(result)
+        except FileNotFoundError as e:
+            return Response(
+                {"error": str(e), "detail": "Train ML models: python ML_1/train_model.py && python ML_2/train_model.py"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Batch prediction failed: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class Esp32ReadingView(APIView):
+    """
+    POST /api/esp32-reading/
+    Accept one ESP32 wireless JSON payload per request.
+    Buffers 3 readings per device → sensor fusion → ML → saves to DB.
+    No auth (factory LAN / ESP32).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = Esp32ReadingSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        fallback_key = request.META.get("REMOTE_ADDR") or "esp32-default"
+        try:
+            result = process_esp32_reading(dict(data), fallback_key)
+            if result["status"] == "buffered":
+                return Response(result, status=status.HTTP_202_ACCEPTED)
+            return Response(result, status=status.HTTP_201_CREATED)
+        except FileNotFoundError as e:
+            return Response(
+                {"error": str(e), "detail": "Train ML models: python ML_1/train_model.py && python ML_2/train_model.py"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"ESP32 ingest failed: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class Esp32RobotStatusView(APIView):
+    """POST /api/esp32-status/ — update the arm station shown on the dashboard."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = Esp32RobotStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        robot_status = update_robot_stage(
+            stage=data["stage"],
+            source_device_id=data.get("source_device_id"),
+        )
+        return Response(robot_status, status=status.HTTP_200_OK)
+
+
+class Esp32LiveView(APIView):
+    """GET /api/esp32-live/ — buffered + latest sensor values for admin dashboard.
+    DELETE /api/esp32-live/ — clear in-memory test/stale live batch (not DB history).
+    """
+
+    # Public on the factory LAN so the live robot display works without an
+    # expiring browser token. Historical/admin APIs remain authenticated.
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(get_live_status())
+
+    def delete(self, request):
+        return Response(clear_live_session())
